@@ -1,0 +1,83 @@
+\documentclass[12pt,a4paper]{article}
+
+% Базовые пакеты для работы с русским языком и математикой
+\usepackage[utf8]{inputenc}
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{hyperref} % Для кликабельных ссылок (по желанию)
+
+\begin{document}
+	
+	% Заголовок
+	\begin{center}
+		\LARGE \bfseries
+		Анализ робастности неявного градиентного \\
+		спуска в архитектуре Transformer к выбросам \\
+		(Outliers)
+	\end{center}
+	
+	\vspace{0.8cm}
+	
+	% Блок авторов
+	\begin{center}
+		\begin{tabular}{cc}
+			\large Владимир Назаров & \large Игнат Чернышов \\
+			\texttt{nazarov.vr@phystech.edu} & \texttt{chernyshov.im@phystech.edu} \\
+			\rule{0pt}{4ex} % Отступ между строками
+			\large Марк Захаров & \large Максим Савичев \\
+			\texttt{zakharov.mark@phystech.edu} & \texttt{savichev.mv@phystech.edu}
+		\end{tabular}
+	\end{center}
+	
+	\vspace{0.8cm}
+	
+	% Дата
+	\begin{center}
+		\large April 15, 2026
+	\end{center}
+	
+	\vspace{1cm}
+	
+	% Абстракт
+	\noindent В статье \cite{vonOswald2023} показано, что прямой проход трансформера способен аппроксимировать шаги градиентного спуска (GD). В данном проекте предлагается исследовать способность этой архитектуры к выучиванию алгоритмов робастной оптимизации. Цель исследования --- проверить, как наличие экстремальных выбросов (outliers) в контексте влияет на предсказания модели и способна ли она научиться игнорировать эти аномалии. В ходе работы мы планируем последовательно изучить различные варианты архитектуры трансформера --- от простейшего механизма линейного внимания до моделей с нелинейностями --- чтобы выяснить, при каких условиях сеть может превзойти стандартный аналитический метод наименьших квадратов (MSE), уязвимый к зашумленным данным.
+	
+	\vspace{0.5cm}
+	
+	% Основной раздел
+	\section*{1 \quad Идея}
+	
+	Проект является исследовательским расширением базовой статьи «Transformers learn in-context by gradient descent» \cite{vonOswald2023}. В оригинальной работе, а также в смежных фундаментальных исследованиях In-Context Learning для линейных моделей \cite{garg2022what, akyurek2022what}, модель симулировала шаги градиентного спуска для классической задачи линейной регрессии с минимизацией среднеквадратичной ошибки (MSE):
+	$$ \min_{\theta} \frac{1}{n} \sum_{i=1}^n (x_i^T \theta - y_i)^2. $$
+	Однако классический градиентный спуск в такой постановке имеет известный математический недостаток: он крайне чувствителен к выбросам. Основная идея нашего проекта заключается в проверке того, наследует ли трансформер эту уязвимость алгоритма, который он аппроксимирует, или же способен в процессе мета-обучения выработать более устойчивую (робастную) стратегию.
+	
+	Для реализации задуманного мы модифицируем пайплайн генерации синтетических данных для линейной регрессии \cite{garg2022what}. Обучающая выборка (контекст) будет генерироваться по следующему правилу:
+	$$ y_i = x_i^T \theta^* + \varepsilon_i + \eta_i, $$
+	где $\theta^*$ --- истинные веса модели, $\varepsilon_i \sim \mathcal{N}(0, \sigma^2)$ --- стандартный гауссовский шум. Переменная $\eta_i$ моделирует аномальные значения и искусственно внедряется с вероятностью $p \in [0.05, 0.10]$ (в этом случае значение $|\eta_i|$ выбирается достаточно большим). При этом «правильным» ответом (target), который модель должна предсказать для тестовой точки $x_{\text{test}}$, будет истинное значение без учета этого шума: $y_{\text{test}} = x_{\text{test}}^T \theta^*$.
+	
+	Эксперименты будут проводиться итеративно: мы начнем с простейшей архитектуры (только линейное внимание, как в начале оригинальной статьи) и затем перейдем к тестированию моделей с добавлением Softmax и MLP-слоев. Мы хотим исследовать, на каком этапе архитектурной сложности модель обретает способность фильтровать аномалии в контексте. Итоговым результатом станет сравнительный анализ траекторий предсказаний трансформера, стандартного GD и аналитических методов робастной оптимизации \cite{huber1964robust}, минимизирующих, например, функцию потерь Хьюбера (Huber Loss):
+$$ \min_{\theta} \frac{1}{n} \sum_{i=1}^n H_\delta(x_i^T \theta - y_i), \quad \text{где} \quad H_\delta(a) = \begin{cases} \frac{1}{2}a^2, & \text{если } |a| \le \delta, \\ \delta(|a| - \frac{1}{2}\delta), & \text{иначе.} \end{cases} $$
+Это позволит сделать объективный вывод о границах применимости неявных оптимизаторов внутри In-Context Learning: ограничены ли они строгим копированием базового MSE, или способны гибко адаптироваться под сложную структуру данных.
+
+\vspace{1cm}
+
+% Список литературы
+\renewcommand{\refname}{Список литературы}
+\begin{thebibliography}{9}
+	
+	\bibitem{vonOswald2023}
+	von Oswald, J., Niklasson, E., Randazzo, E., Sacramento, J., Mordvintsev, A., Zhmoginov, A., \& Vladymyrov, M. (2023). Transformers learn in-context by gradient descent. \textit{International Conference on Machine Learning (ICML)}, PMLR.
+	
+	\bibitem{garg2022what}
+	Garg, S., Tsipras, D., Liang, P. S., \& Valiant, G. (2022). What can transformers learn in-context? A case study of linear models. \textit{Advances in Neural Information Processing Systems (NeurIPS)}, 35, 30475-30487.
+	
+	\bibitem{akyurek2022what}
+	Akyürek, E., Schuurmans, D., Andreas, J., Ma, T., \& Zhou, D. (2023). What learning algorithm is in-context learning? Investigations with linear models. \textit{International Conference on Learning Representations (ICLR)}.
+	
+	\bibitem{huber1964robust}
+	Huber, P. J. (1964). Robust estimation of a location parameter. \textit{The Annals of Mathematical Statistics}, 35(1), 73-101.
+	
+\end{thebibliography}
+
+\end{document}
