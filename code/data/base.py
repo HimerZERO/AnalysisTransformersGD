@@ -56,7 +56,7 @@ class TaskGenerator(ABC):
 
         pass
 
-    def generate_task(self, N: int):
+    def generate_task(self, N: int, new_params: bool = True):
         """
         Генерирует одну задачу для In-Context Learning.
         
@@ -72,7 +72,7 @@ class TaskGenerator(ABC):
             Y_test_true: np.ndarray формы (ny,) — правильный ответ для теста.
         """
 
-        teacher = self.generate_teacher()
+        teacher = self.generate_teacher() if new_params else self.teacher_params
 
         X_context = np.random.uniform(*self.x_range, size=(N, self.nx))
         Y_context = self.compute_y(teacher, X_context)

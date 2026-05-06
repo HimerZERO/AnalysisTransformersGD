@@ -38,7 +38,8 @@ class LinearTaskGenerator(TaskGenerator):
             W: np.ndarray формы (ny, nx) - матрица весов W.
         """
 
-        return np.random.normal(loc=0, scale=self.w_std, size=(self.ny, self.nx))
+        self.teacher_params = np.random.normal(loc=0, scale=self.w_std, size=(self.ny, self.nx))
+        return self.teacher_params
     
     def compute_y(self, teacher_params, X):
         """
@@ -52,6 +53,4 @@ class LinearTaskGenerator(TaskGenerator):
             Y: np.ndarray формы (n_samples, ny) - вычисленные значения y.
         """
         return X @ teacher_params.T
-
-
     
