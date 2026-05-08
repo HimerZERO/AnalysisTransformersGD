@@ -199,6 +199,7 @@ class SelfAttentionLayer(nn.Module):
         self.W_k = nn.Linear(self.dim, self.dim, bias=False)
         self.W_v = nn.Linear(self.dim, self.dim, bias=False)
         self.P = nn.Linear(self.dim, self.dim, bias=False)
+        self.act = nn.Softmax(dim=-1)
     
     def forward(self, x):
         """
@@ -215,8 +216,9 @@ class SelfAttentionLayer(nn.Module):
         K = self.W_k(x) # [batch, seq_len, dim]
         V = self.W_v(x) # [batch, seq_len, dim]
 
-        attn_scores = nn.Softmax(Q @ K.transpose(-2, -1))  # [batch, seq_len, dim] @ [batch, dim, seq_len] ---> [batch, seq_len, seq_len]
-        attn_out = attn_scores @ V # [batch, seq_len, seq_len] @ [batch, seq_len, dim] ---> [batch, seq_len, dim]
+        attn_scores = Q @ K.transpose(-2, -1) / (self.dim ** 0.5) # [batch, seq_len, dim] @ [batch, dim, seq_len] ---> [batch, seq_len, seq_len]
+        attn_weights = self.act(attn_scores) # [batch, seq_len, seq_len]
+        attn_out = attn_weights @ V # [batch, seq_len, seq_len] @ [batch, seq_len, dim] ---> [batch, seq_len, dim]
         out = self.P(attn_out) # [batch, seq_len, dim] @ [batch, dim, dim] ---> [batch, seq_len, dim]
 
         return x + out
