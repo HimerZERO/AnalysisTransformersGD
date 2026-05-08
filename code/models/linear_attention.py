@@ -81,7 +81,7 @@ class SingleLayerLSA(BaseICLModel):
         nx (int): Размерность признаков x.
         ny (int): Размерность целевой переменной y.
         dim (int): Общая размерность токена (nx+ny).
-        layer (LinearSelfAttentionLayer): Слой attention.
+        layer (LinearSelfAttentionLayer): Слой attention (линейный).
         readout_scale (float): Множитель при чтении предсказания.
     """
 
@@ -169,3 +169,119 @@ class SingleLayerLSA(BaseICLModel):
         P[nx:, :nx] = (eta / N) * torch.eye(ny, nx)
         
         self.layer.set_weights(W_q, W_k, W_v, P)
+
+
+class SelfAttentionLayer(nn.Module):
+    """
+    Слой Self-Attention с softmax.
+    
+    Реализует обновление токенов по формуле:
+        x <- x + P @ SoftMax(Q @ K^T) @ V
+    Наследуется от nn.Module
+    
+    Attributes:
+        dim (int): Размерность токенов (nx+ny).
+        W_q, W_k, W_v, P (nn.Linear): Линейные проекции без bias.
+    """
+
+    def __init__(self, dim):
+        """
+        Инициализирует слой Self-Attention.
+        
+        Args:
+            dim: Размерность входных и выходных токенов.
+        """
+
+        super().__init__()
+        self.dim = dim
+    
+        self.W_q = nn.Linear(self.dim, self.dim, bias=False)
+        self.W_k = nn.Linear(self.dim, self.dim, bias=False)
+        self.W_v = nn.Linear(self.dim, self.dim, bias=False)
+        self.P = nn.Linear(self.dim, self.dim, bias=False)
+    
+    def forward(self, x):
+        """
+        Прямой проход слоя.
+        
+        Args:
+            x: Токены формы (batch, seq_len, dim).
+            
+        Returns:
+            torch.Tensor: Обновлённые токены формы (batch, seq_len, dim).
+        """
+
+        Q = self.W_q(x) # [batch, seq_len, dim]
+        K = self.W_k(x) # [batch, seq_len, dim]
+        V = self.W_v(x) # [batch, seq_len, dim]
+
+        attn_scores = nn.Softmax(Q @ K.transpose(-2, -1))  # [batch, seq_len, dim] @ [batch, dim, seq_len] ---> [batch, seq_len, seq_len]
+        attn_out = attn_scores @ V # [batch, seq_len, seq_len] @ [batch, seq_len, dim] ---> [batch, seq_len, dim]
+        out = self.P(attn_out) # [batch, seq_len, dim] @ [batch, dim, dim] ---> [batch, seq_len, dim]
+
+        return x + out
+
+
+class SingleLayerSelfAttention(BaseICLModel):
+    """
+    Однослойная Self-Attention модель для In-Context Learning.
+    
+    Модель принимает токенизированную последовательность [x_i, y_i] для
+    обучающих примеров и [x_test, -W0 @ x_test] для тестового запроса.
+    После прямого прохода предсказание извлекается из y-части последнего
+    токена с умножением на readout_scale = -1. Наследуется от BaseICLModel
+    
+    Attributes:
+        nx (int): Размерность признаков x.
+        ny (int): Размерность целевой переменной y.
+        dim (int): Общая размерность токена (nx+ny).
+        layer (SelfAttentionLayer): Слой attention.
+        readout_scale (float): Множитель при чтении предсказания.
+    """
+
+    def __init__(self, nx, ny):
+        """
+        Инициализирует однослойную SA модель.
+        
+        Args:
+            nx: Размерность признаков x.
+            ny: Размерность целевой переменной y.
+        """
+
+        super().__init__()
+        self.nx = nx
+        self.ny = ny
+        self.dim = nx + ny
+
+        self.layer = SelfAttentionLayer(self.dim)
+
+        self.readout_scale = -1.0
+
+    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+        """
+        Прямой проход через слой attention.
+        
+        Args:
+            tokens: Токены формы (batch, seq_len, dim).
+            
+        Returns:
+            torch.Tensor: Преобразованные токены формы (batch, seq_len, dim).
+        """
+
+        return self.layer(tokens)
+    
+    def predict(self, tokens: torch.Tensor) -> torch.Tensor:
+        """
+        Извлекает предсказание для тестового токена.
+        
+        Берёт y-часть последнего токена и умножает на readout_scale.
+        
+        Args:
+            tokens: Токены формы (batch, seq_len, dim).
+            
+        Returns:
+            torch.Tensor: Предсказания формы (batch, ny).
+        """
+
+        out = self.forward(tokens) # [batch, seq_len, dim]
+        return self.readout_scale * out[:, -1, -self.ny:] # [batch, ny]

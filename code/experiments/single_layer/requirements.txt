@@ -1,0 +1,6 @@
+ipykernel==7.2.0
+ipython==9.11.0
+numpy==2.4.2
+scikit-learn==1.8.0
+torch==2.11.0+cu126
+tqdm==4.67.3
