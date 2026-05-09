@@ -1,205 +1,51 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from .base import BaseICLModel
-
-class LinearSelfAttentionLayer(nn.Module):
-    """
-    Слой Linear Self-Attention без softmax-нормализации.
-    
-    Реализует обновление токенов по формуле:
-        x <- x + P @ Q @ K^T @ V
-    Наследуется от nn.Module
-    
-    Attributes:
-        dim (int): Размерность токенов (nx+ny).
-        W_q, W_k, W_v, P (nn.Linear): Линейные проекции без bias.
-    """
-
-    def __init__(self, dim):
-        """
-        Инициализирует слой Linear Self-Attention.
-        
-        Args:
-            dim: Размерность входных и выходных токенов.
-        """
-
-        super().__init__()
-        self.dim = dim
-    
-        self.W_q = nn.Linear(self.dim, self.dim, bias=False)
-        self.W_k = nn.Linear(self.dim, self.dim, bias=False)
-        self.W_v = nn.Linear(self.dim, self.dim, bias=False)
-        self.P = nn.Linear(self.dim, self.dim, bias=False)
-    
-    def forward(self, x):
-        """
-        Прямой проход слоя.
-        
-        Args:
-            x: Токены формы (batch, seq_len, dim).
-            
-        Returns:
-            torch.Tensor: Обновлённые токены формы (batch, seq_len, dim).
-        """
-
-        Q = self.W_q(x) # [batch, seq_len, dim]
-        K = self.W_k(x) # [batch, seq_len, dim]
-        V = self.W_v(x) # [batch, seq_len, dim]
-
-        attn_scores = Q @ K.transpose(-2, -1)  # [batch, seq_len, dim] @ [batch, dim, seq_len] ---> [batch, seq_len, seq_len]
-        attn_out = attn_scores @ V # [batch, seq_len, seq_len] @ [batch, seq_len, dim] ---> [batch, seq_len, dim]
-        out = self.P(attn_out) # [batch, seq_len, dim] @ [batch, dim, dim] ---> [batch, seq_len, dim]
-
-        return x + out
-
-    def set_weights(self, W_q, W_k, W_v, P):
-        """
-        Устанавливает веса слоя вручную.
-        
-        Args:
-            W_q, W_k, W_v, P: Матрицы весов формы (dim, dim).
-        """
-
-        with torch.no_grad():
-            self.W_q.weight.copy_(W_q)
-            self.W_k.weight.copy_(W_k)
-            self.W_v.weight.copy_(W_v)
-            self.P.weight.copy_(P)
-
-
-class SingleLayerLSA(BaseICLModel):
-    """
-    Однослойная Linear Self-Attention модель для In-Context Learning.
-    
-    Модель принимает токенизированную последовательность [x_i, y_i] для
-    обучающих примеров и [x_test, -W0 @ x_test] для тестового запроса.
-    После прямого прохода предсказание извлекается из y-части последнего
-    токена с умножением на readout_scale = -1. Наследуется от BaseICLModel
-    
-    Attributes:
-        nx (int): Размерность признаков x.
-        ny (int): Размерность целевой переменной y.
-        dim (int): Общая размерность токена (nx+ny).
-        layer (LinearSelfAttentionLayer): Слой attention (линейный).
-        readout_scale (float): Множитель при чтении предсказания.
-    """
-
-    def __init__(self, nx, ny):
-        """
-        Инициализирует однослойную LSA модель.
-        
-        Args:
-            nx: Размерность признаков x.
-            ny: Размерность целевой переменной y.
-        """
-
-        super().__init__()
-        self.nx = nx
-        self.ny = ny
-        self.dim = nx + ny
-
-        self.layer = LinearSelfAttentionLayer(self.dim)
-
-        self.readout_scale = -1.0
-
-    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
-        """
-        Прямой проход через слой attention.
-        
-        Args:
-            tokens: Токены формы (batch, seq_len, dim).
-            
-        Returns:
-            torch.Tensor: Преобразованные токены формы (batch, seq_len, dim).
-        """
-
-        return self.layer(tokens)
-    
-    def predict(self, tokens: torch.Tensor) -> torch.Tensor:
-        """
-        Извлекает предсказание для тестового токена.
-        
-        Берёт y-часть последнего токена и умножает на readout_scale.
-        
-        Args:
-            tokens: Токены формы (batch, seq_len, dim).
-            
-        Returns:
-            torch.Tensor: Предсказания формы (batch, ny).
-        """
-
-        out = self.forward(tokens) # [batch, seq_len, dim]
-        return self.readout_scale * out[:, -1, -self.ny:] # [batch, ny]
-    
-    def set_weights_from_gd(self, eta: float, N: int, W0: torch.Tensor = None):
-        """
-        Устанавливает веса модели в соответствии с одним шагом GD.
-        
-        Матрицы:
-            W_q[:nx, :nx] = I
-            W_k[:nx, :nx] = I
-            W_v[nx:, :nx] = W0
-            W_v[nx:, nx:] = -I
-            P = (eta / N) * I
-        
-        Args:
-            eta: Learning rate градиентного спуска.
-            N: Количество обучающих примеров в контексте.
-            W0: Начальные веса модели формы (ny, nx). Если None, используется 0.
-        """
-        
-        if W0 is None:
-            W0 = torch.zeros(self.ny, self.nx)
-
-        d = self.dim
-        nx = self.nx
-        ny = self.ny
-        
-        W_q = torch.zeros(d, d)
-        W_q[:nx, :nx] = torch.eye(nx)
-        
-        W_k = torch.zeros(d, d)
-        W_k[:nx, :nx] = torch.eye(nx)
-        
-        W_v = torch.zeros(d, d)
-        W_v[:nx, nx:] = -torch.eye(nx, ny)
-        
-        P = torch.zeros(d, d)
-        P[nx:, :nx] = (eta / N) * torch.eye(ny, nx)
-        
-        self.layer.set_weights(W_q, W_k, W_v, P)
-
 
 class SelfAttentionLayer(nn.Module):
     """
-    Слой Self-Attention с softmax.
+    Один слой Self-Attention с поддержкой Multi-Head и двух режимов работы.
     
-    Реализует обновление токенов по формуле:
-        x <- x + P @ SoftMax(Q @ K^T) @ V
-    Наследуется от nn.Module
+    Linear Self-Attention (use_softmax=False):
+        x <- x + W_o @ (Q @ K^T @ V)
+    
+    Softmax Attention (use_softmax=True):
+        x <- x + W_o @ softmax(Q @ K^T / sqrt(d_head)) @ V
+    
+    Наследуется от nn.Module.
     
     Attributes:
         dim (int): Размерность токенов (nx+ny).
-        W_q, W_k, W_v, P (nn.Linear): Линейные проекции без bias.
+        use_softmax (bool): True - Softmax Attention, False - Linear Self-Attention.
+        n_heads (int): Количество голов внимания.
+        d_head (int): Размерность одной головы (dim // n_heads).
+        W_q, W_k, W_v (nn.Linear): Линейные проекции для Q, K, V без bias.
+        W_o (nn.Linear): Выходная линейная проекция без bias.
     """
 
-    def __init__(self, dim):
+    def __init__(self, dim, use_softmax=True, n_heads=1):
         """
         Инициализирует слой Self-Attention.
         
         Args:
-            dim: Размерность входных и выходных токенов.
+            dim: Размерность токенов.
+            use_softmax: True - Softmax Attention, False - Linear Self-Attention.
+            n_heads: Количество голов. dim должно делиться на n_heads нацело.
         """
 
         super().__init__()
+
+        assert dim % n_heads == 0, f'dim ({dim}) must be divisible by n_heads ({n_heads})'
+
         self.dim = dim
-    
+        self.use_softmax = use_softmax
+        self.n_heads = n_heads
+        self.d_head = dim // n_heads
+
         self.W_q = nn.Linear(self.dim, self.dim, bias=False)
         self.W_k = nn.Linear(self.dim, self.dim, bias=False)
         self.W_v = nn.Linear(self.dim, self.dim, bias=False)
-        self.P = nn.Linear(self.dim, self.dim, bias=False)
-        self.act = nn.Softmax(dim=-1)
+        self.W_o = nn.Linear(self.dim, self.dim, bias=False)
     
     def forward(self, x):
         """
@@ -212,78 +58,128 @@ class SelfAttentionLayer(nn.Module):
             torch.Tensor: Обновлённые токены формы (batch, seq_len, dim).
         """
 
-        Q = self.W_q(x) # [batch, seq_len, dim]
-        K = self.W_k(x) # [batch, seq_len, dim]
-        V = self.W_v(x) # [batch, seq_len, dim]
+        B, L, D = x.shape
 
-        attn_scores = Q @ K.transpose(-2, -1) / (self.dim ** 0.5) # [batch, seq_len, dim] @ [batch, dim, seq_len] ---> [batch, seq_len, seq_len]
-        attn_weights = self.act(attn_scores) # [batch, seq_len, seq_len]
-        attn_out = attn_weights @ V # [batch, seq_len, seq_len] @ [batch, seq_len, dim] ---> [batch, seq_len, dim]
-        out = self.P(attn_out) # [batch, seq_len, dim] @ [batch, dim, dim] ---> [batch, seq_len, dim]
+        Q = self.W_q(x).view(B, L, self.n_heads, self.d_head).transpose(1, 2) # (batch, n_heads, seq_len, d_head)
+        K = self.W_k(x).view(B, L, self.n_heads, self.d_head).transpose(1, 2) # (batch, n_heads, seq_len, d_head)
+        V = self.W_v(x).view(B, L, self.n_heads, self.d_head).transpose(1, 2) # (batch, n_heads, seq_len, d_head)
+
+        attn_scores = Q @ K.transpose(-2, -1)  # (batch, n_heads, seq_len, d_head) @ (batch, n_heads, d_head, seq_len) --->
+                                               # ---> (batch, n_heads, seq_len, seq_len)
+        if self.use_softmax:
+            attn_scores = attn_scores / (self.d_head ** 0.5)
+            attn_weights = torch.softmax(attn_scores, dim=-1)
+        else:
+            attn_weights = attn_scores
+
+        attn_out = attn_weights @ V # (batch, n_heads, seq_len, seq_len) @ (batch, n_heads, seq_len, d_head) ---> 
+                                    # ---> (batch, n_heads, seq_len, d_head)
+        
+        attn_out = attn_out.transpose(1, 2).contiguous().view(B, L, D) # (batch, seq_len, dim)
+        out = self.W_o(attn_out)
 
         return x + out
 
+    def reset_parameters(self):
+        """Переинициализирует все веса слоя."""
+        self.W_q.reset_parameters()
+        self.W_k.reset_parameters()
+        self.W_v.reset_parameters()
+        self.W_o.reset_parameters()
 
-class SingleLayerSelfAttention(BaseICLModel):
+
+class SelfAttentionModel(nn.Module):
     """
-    Однослойная Self-Attention модель для In-Context Learning.
+    Модель Self-Attention для экспериментов по In-Context Learning.
     
-    Модель принимает токенизированную последовательность [x_i, y_i] для
-    обучающих примеров и [x_test, -W0 @ x_test] для тестового запроса.
-    После прямого прохода предсказание извлекается из y-части последнего
-    токена с умножением на readout_scale = -1. Наследуется от BaseICLModel
+    Позволяет создавать модели разной глубины и конфигурации:
+    - Однослойные/многослойные (n_layers)
+    - Linear Self-Attention / Softmax Attention (use_softmax)
+    - С LayerNorm между слоями или без (use_layernorm)
+    
+    Предсказание извлекается из y-части последнего токена
+    с умножением на readout_scale.
+    Наследуется от nn.Module.
     
     Attributes:
         nx (int): Размерность признаков x.
         ny (int): Размерность целевой переменной y.
         dim (int): Общая размерность токена (nx+ny).
-        layer (SelfAttentionLayer): Слой attention.
+        n_layers (int): Количество слоёв SelfAttentionLayer.
+        use_softmax (bool): Тип внимания для всех слоёв.
+        use_layernorm (bool): Применять LayerNorm между слоями.
         readout_scale (float): Множитель при чтении предсказания.
+        layers (nn.ModuleList): Список слоёв SelfAttentionLayer.
+        norms (nn.ModuleList | None): Список LayerNorm (если use_layernorm=True).
     """
 
-    def __init__(self, nx, ny):
-        """
-        Инициализирует однослойную SA модель.
-        
-        Args:
-            nx: Размерность признаков x.
-            ny: Размерность целевой переменной y.
-        """
+    def __init__(self,
+        nx: int,
+        ny: int,
+        n_layers: int = 1,
+        use_softmax: bool = True,
+        use_layernorm: bool = True,
+        readout_scale: float = -1.0):
 
         super().__init__()
         self.nx = nx
         self.ny = ny
         self.dim = nx + ny
+        self.n_layers = n_layers
+        self.use_softmax = use_softmax
+        self.use_layernorm = use_layernorm
+        self.readout_scale = readout_scale
 
-        self.layer = SelfAttentionLayer(self.dim)
+        self.layers = nn.ModuleList([
+            SelfAttentionLayer(self.dim, use_softmax=use_softmax)
+            for _ in range(n_layers)
+        ])
 
-        self.readout_scale = -1.0
-
-    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+        self.norms = nn.ModuleList([
+            nn.LayerNorm(self.dim)
+            for _ in range(n_layers)
+        ]) if use_layernorm else None
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Прямой проход через слой attention.
+        Прямой проход через все слои.
         
         Args:
-            tokens: Токены формы (batch, seq_len, dim).
+            x: Токены формы (batch, seq_len, dim).
             
         Returns:
             torch.Tensor: Преобразованные токены формы (batch, seq_len, dim).
         """
 
-        return self.layer(tokens)
+        for i, layer in enumerate(self.layers):
+            if self.norms is not None:
+                x = self.norms[i](x)
+            x = layer(x)
+        return x
     
-    def predict(self, tokens: torch.Tensor) -> torch.Tensor:
+    def predict(self, x: torch.Tensor) -> torch.Tensor:
         """
         Извлекает предсказание для тестового токена.
         
         Берёт y-часть последнего токена и умножает на readout_scale.
         
         Args:
-            tokens: Токены формы (batch, seq_len, dim).
+            x: Токены формы (batch, seq_len, dim).
             
         Returns:
             torch.Tensor: Предсказания формы (batch, ny).
         """
 
-        out = self.forward(tokens) # [batch, seq_len, dim]
-        return self.readout_scale * out[:, -1, -self.ny:] # [batch, ny]
+        out = self.forward(x)
+        return self.readout_scale * out[:, -1, -self.ny:]
+    
+    def reset_parameters(self):
+        """
+        Переинициализирует веса всех слоёв и нормализаций.
+        """
+        for layer in self.layers:
+            layer.reset_parameters()
+        if self.norms is not None:
+            for norm in self.norms:
+                norm.reset_parameters()
+
