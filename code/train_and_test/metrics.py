@@ -42,7 +42,12 @@ def r2_score(y_true: torch.Tensor, y_pred: torch.Tensor) -> float:
     r2 = 1 - ss_res / ss_tot
     return r2.item()
 
-def evaluate_model(theta_hat, trajectory, X_test, y_pred, y_true_clean) -> Dict[str, Any]:
+def evaluate_model(
+        theta_hat: torch.Tensor,
+        trajectory: torch.Tensor,
+        X_test: torch.Tensor,
+        y_pred: torch.Tensor,
+        y_true_clean: torch.Tensor) -> Dict[str, Any]:
     """
     Проводит комплексную оценку модели.
 
