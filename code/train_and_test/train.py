@@ -10,9 +10,9 @@ from train_and_test.gradient_descent import gd_trajectory
 def train_ICL_model(model, task_generator, 
                     optimizer,
                     n_steps: int = 2000, 
-                    batch_size: int = 2048, 
-                    lr: float = 0.001, N: int = 10, 
+                    batch_size: int = 2048,
                     device='cpu', 
+                    N: int = 10,
                     verbose: bool = True, 
                     test_interval: int = 100,
                     val_tasks: int = 1000,
@@ -28,7 +28,6 @@ def train_ICL_model(model, task_generator,
         task_generator: Генератор задач с методом .generate_task(N).
         n_steps: Количество шагов обучения.
         batch_size: Размер батча.
-        lr: Learning rate для оптимизатора.
         N: Количество обучающих примеров в контексте.
         device: Устройство для вычислений.
         verbose: Если True, показывает прогресс-бар и графики.
@@ -38,7 +37,7 @@ def train_ICL_model(model, task_generator,
         gd_loss_type: Тип функции потерь для GD - 'mse' или 'huber'.
             По умолчанию 'mse'.
         huber_delta: Параметр дельта для Huber-loss. По умолчанию 1.0.
-        gd_n_steps: Количество шагов GD (по умолчанию model.n_layers).
+        gd_n_steps: Количество шагов GD. По умолчанию model.n_layers.
     
     Returns:
         model: Обученная модель.
@@ -70,7 +69,7 @@ def train_ICL_model(model, task_generator,
     
     best_lr = None
     best_gd_loss = float('inf')
-    for gd_lr in lr_values:
+    for gd_lr in tqdm(lr_values):
         total_loss = 0.0
         for i in range(val_tasks):
             X_i = X_val[i]
@@ -131,30 +130,58 @@ def train_ICL_model(model, task_generator,
                     gd_label = f'GD MSE (lr = {best_lr:.4f})'
                 else:
                     gd_label = f'GD Huber (lr = {best_lr:.4f}, $\Delta$ = {huber_delta:.2f})'
-                
+
                 iterator.set_postfix(
                     train_loss=loss.item(),
-                    tf_val=f'{loss_tf:.4f}'
+                    tf_val=f'{loss_tf:.4f}',
+                    gd_val=f'{best_gd_loss:.4f}'
                 )
 
                 clear_output(wait=True)
-                fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-                
+                fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
                 axes[0].plot(losses, linewidth=1, color='#0000FF')
                 axes[0].set_xlabel('Step')
                 axes[0].set_ylabel('MSE Loss')
                 axes[0].set_title('Training Loss')
                 axes[0].set_yscale('log')
-                axes[0].grid(True, alpha=1)
-                
-                axes[1].plot(val_steps, tf_val_losses, 'o-', label='Trained TF', markersize=2)
-                axes[1].axhline(y=best_gd_loss, color='#FF0000', linestyle='--', label=gd_label)
+                axes[0].grid(True, alpha=0.3)
+
+                tf_min = min(tf_val_losses) if tf_val_losses else 0
+                tf_max = max(tf_val_losses) if tf_val_losses else 1
+
+                gd_is_visible = (best_gd_loss > tf_min * 0.1)
+
+                if gd_is_visible:
+                    axes[1].set_yscale('linear')
+                    y_min = min(tf_min, best_gd_loss) * 0.9
+                    y_max = max(tf_max, best_gd_loss) * 1.1
+                else:
+                    axes[1].set_yscale('log')
+                    y_min = None
+                    y_max = None
+
+                axes[1].plot(val_steps, tf_val_losses, 'o-', color='#3366CC',
+                            label='Trained TF', markersize=3, lw=1.5)
+                axes[1].axhline(y=best_gd_loss, color='#FF0000', linestyle='--', lw=2,
+                                label=gd_label)
                 axes[1].set_xlabel('Step')
                 axes[1].set_ylabel('MSE Loss')
                 axes[1].set_title('Validation: TF vs GD')
                 axes[1].legend()
-                axes[1].grid(True, alpha=1)
-                
+                axes[1].grid(True, alpha=0.3)
+
+                if not gd_is_visible:
+                    axes[1].text(0.98, 0.02, f'GD loss: {best_gd_loss:.6f}',
+                                transform=axes[1].transAxes,
+                                ha='right', va='bottom',
+                                fontsize=9, color='#FF0000',
+                                bbox=dict(boxstyle='round,pad=0.3',
+                                        facecolor='white', alpha=0.8))
+
+                if y_min is not None and y_max is not None:
+                    axes[1].set_ylim(y_min, y_max)
+
                 plt.tight_layout()
                 plt.show()
 
