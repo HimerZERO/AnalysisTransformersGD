@@ -17,7 +17,7 @@ def train_ICL_model(model, task_generator,
                     test_interval: int = 100,
                     val_tasks: int = 1000,
                     eta_values: list[float] = None):
-    """
+    '''
     Обучает In-Context Learning модель на задачах из генератора.
     
     Периодически сравнивает loss модели с loss градиентного спуска
@@ -42,7 +42,7 @@ def train_ICL_model(model, task_generator,
         tf_val_losses: Список valid loss модели.
         gd_val_losses: Список valid loss модели GD.
         best_eta: Оптимальная eta для GD.
-    """
+    '''
 
     if eta_values is None:
         eta_values = [0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]
@@ -121,8 +121,8 @@ def train_ICL_model(model, task_generator,
             if verbose:
                 iterator.set_postfix(
                     train_loss=loss.item(),
-                    tf_val=f"{loss_tf:.4f}",
-                    gd_val=f"{loss_gd:.4f}"
+                    tf_val=f'{loss_tf:.4f}',
+                    gd_val=f'{loss_gd:.4f}'
                 )
                 
                 clear_output(wait=True)

@@ -16,7 +16,7 @@ class LinearTaskGenerator(TaskGenerator):
         w_std (float): стандартное отклонение распределения, из которого генерируются матрицы.
     """
 
-    def __init__(self, nx: int, ny: int, x_range: tuple[float, float], w_std: float = 1.0):
+    def __init__(self, nx: int, ny: int, x_range: tuple[float, float], noise: float | None = None, w_std: float = 1.0):
         """
         Инициализирует генератор задач линейной регрессии.
         
@@ -27,13 +27,13 @@ class LinearTaskGenerator(TaskGenerator):
             w_std: Стандартное отклонение весов учителя.
         """
 
-        super().__init__(nx, ny, x_range)
+        super().__init__(nx, ny, x_range, noise)
         self.w_std = w_std
     
     def generate_teacher(self):
         """
         Генерирует матрицу весов учителя из нормального распределения.
-        
+
         Returns:
             W: np.ndarray формы (ny, nx) - матрица весов W.
         """
@@ -52,5 +52,8 @@ class LinearTaskGenerator(TaskGenerator):
         Returns:
             Y: np.ndarray формы (n_samples, ny) - вычисленные значения y.
         """
-        return X @ teacher_params.T
+        result = X @ teacher_params.T
+        if self.noise is not None:
+            result += np.random.normal(loc=0, scale=self.noise, size=result.shape)
+        return result
     

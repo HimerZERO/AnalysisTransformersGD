@@ -15,7 +15,7 @@ class TaskGenerator(ABC):
         x_range (tuple[float, float]): Границы равномерного распределения для генерации признаков x.
     """
 
-    def __init__(self, nx: int, ny: int = 1, x_range: tuple = (-1, 1)):
+    def __init__(self, nx: int, ny: int = 1, x_range: tuple = (-1, 1), noise=None):
         """
         Инициализирует генератор задач.
 
@@ -23,11 +23,13 @@ class TaskGenerator(ABC):
             nx: Размерность признаков x.
             ny: Размерность целевой переменной y.
             x_range: Кортеж (min, max) для равномерной генерации x.
+            noise: Стандартное отклонение для генерации шума из нормального распределения. None для генерации без шума
         """
         
         self.nx = nx
         self.ny = ny
         self.x_range = x_range
+        self.noise = noise
   
     @abstractmethod
     def generate_teacher(self):
