@@ -147,19 +147,6 @@ def train_ICL_model(model, task_generator,
                 axes[0].set_yscale('log')
                 axes[0].grid(True, alpha=0.3)
 
-                tf_min = min(tf_val_losses) if tf_val_losses else 0
-                tf_max = max(tf_val_losses) if tf_val_losses else 1
-
-                gd_is_visible = (best_gd_loss > tf_min * 0.1)
-
-                if gd_is_visible:
-                    axes[1].set_yscale('linear')
-                    y_min = min(tf_min, best_gd_loss) * 0.9
-                    y_max = max(tf_max, best_gd_loss) * 1.1
-                else:
-                    axes[1].set_yscale('log')
-                    y_min = None
-                    y_max = None
 
                 axes[1].plot(val_steps, tf_val_losses, 'o-', color='#3366CC',
                             label='Trained TF', markersize=3, lw=1.5)
@@ -170,17 +157,6 @@ def train_ICL_model(model, task_generator,
                 axes[1].set_title('Validation: TF vs GD')
                 axes[1].legend()
                 axes[1].grid(True, alpha=0.3)
-
-                if not gd_is_visible:
-                    axes[1].text(0.98, 0.02, f'GD loss: {best_gd_loss:.6f}',
-                                transform=axes[1].transAxes,
-                                ha='right', va='bottom',
-                                fontsize=9, color='#FF0000',
-                                bbox=dict(boxstyle='round,pad=0.3',
-                                        facecolor='white', alpha=0.8))
-
-                if y_min is not None and y_max is not None:
-                    axes[1].set_ylim(y_min, y_max)
 
                 plt.tight_layout()
                 plt.show()
