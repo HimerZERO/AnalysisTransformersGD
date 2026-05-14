@@ -164,7 +164,7 @@ class SelfAttentionModel(nn.Module):
             n_heads_list = [1] * n_layers
 
         self.layers = nn.ModuleList([
-            SelfAttentionLayer(self.dim, use_softmax=use_softmax, n_heads=n_heads_list[i], mlp_hidden_sizes=mlp_hidden_sizes[i])
+            SelfAttentionLayer(self.dim, use_softmax=use_softmax, n_heads=n_heads_list[i], mlp_hidden_sizes=mlp_hidden_sizes)
             for i in range(n_layers)
         ])
 

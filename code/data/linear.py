@@ -143,7 +143,7 @@ class OutlierLinearGenerator(LinearTaskGenerator):
             np.ndarray той же формы с добавленными выбросами.
         """
 
-        batch_size, N, ny = Y.shape
+        batch_size, N = Y.shape
         mask = np.random.random(size=(batch_size, N, 1)) < self.outlier_prob
 
         if self.outlier_direction == 'both':

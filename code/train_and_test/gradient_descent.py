@@ -28,16 +28,9 @@ def gd_step(X, y, W, lr, loss_type='mse', huber_delta=1.0) -> torch.Tensor:
         grad = (2.0 / X.shape[0]) * (residuals.T @ X)
     
     elif loss_type == 'huber':
-        abs_res = torch.abs(residuals)
-        
-        quadratic_mask = (abs_res <= huber_delta)
-        linear_mask = ~quadratic_mask
-        
-        grad_residuals = torch.zeros_like(residuals)
-        grad_residuals[quadratic_mask] = residuals[quadratic_mask]
-        grad_residuals[linear_mask] = huber_delta * torch.sign(residuals[linear_mask])
-        
+        grad_residuals = torch.clamp(residuals, min=-huber_delta, max=huber_delta)
         grad = (grad_residuals.T @ X) / X.shape[0]
+
     
     W_new = W - lr * grad
 
