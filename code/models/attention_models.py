@@ -142,6 +142,7 @@ class SelfAttentionModel(nn.Module):
         nx: int,
         ny: int,
         n_layers: int = 1,
+        n_heads_list: list[int] | None = None,
         use_softmax: bool = True,
         use_layernorm: bool = True,
         mlp_hidden_sizes: list[int] | None = None,
@@ -158,9 +159,12 @@ class SelfAttentionModel(nn.Module):
 
         if mlp_hidden_sizes is None:
             mlp_hidden_sizes = [None] * n_layers
+        
+        if n_heads_list is None:
+            n_heads_list = [1] * n_layers
 
         self.layers = nn.ModuleList([
-            SelfAttentionLayer(self.dim, use_softmax=use_softmax, mlp_hidden_sizes=mlp_hidden_sizes[i])
+            SelfAttentionLayer(self.dim, use_softmax=use_softmax, n_heads=n_heads_list[i], mlp_hidden_sizes=mlp_hidden_sizes)
             for i in range(n_layers)
         ])
 
